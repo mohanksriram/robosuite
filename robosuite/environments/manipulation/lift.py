@@ -293,13 +293,13 @@ class Lift(SingleArmEnv):
             self.placement_initializer = UniformRandomSampler(
                 name="ObjectSampler",
                 mujoco_objects=self.cube,
-                x_range=[-0.03, 0.03],
-                y_range=[-0.03, 0.03],
+                x_range=[-0.22, 0.22],
+                y_range=[-0.22, 0.22],
                 rotation=None,
                 ensure_object_boundary_in_range=False,
                 ensure_valid_placement=True,
                 reference_pos=self.table_offset,
-                z_offset=0.01,
+                z_offset=0,
             )
 
         # task includes arena, robot, and objects of interest

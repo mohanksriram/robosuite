@@ -55,12 +55,12 @@ if __name__ == "__main__":
 
     # list of all demonstrations episodes
     demos = list(f["data"].keys())
-
-    while True:
+    print(f"number of demonstrations: {len(demos)}")
+    for ep in demos:
         print("Playing back random episode... (press ESC to quit)")
 
         # # select an episode randomly
-        ep = random.choice(demos)
+        # ep = random.choice(demos)
 
         # read the model xml, using the metadata stored in the attribute for this episode
         model_xml = f["data/{}".format(ep)].attrs["model_file"]
@@ -73,6 +73,9 @@ if __name__ == "__main__":
 
         # load the flattened mujoco states
         states = f["data/{}/states".format(ep)][()]
+        
+        unused_actions = 0
+        total_actions = 0
 
         if args.use_actions:
 
@@ -83,17 +86,27 @@ if __name__ == "__main__":
             # load the actions and play them back open-loop
             actions = np.array(f["data/{}/actions".format(ep)][()])
             num_actions = actions.shape[0]
-
+            unused_actions = 0
+            repeat = 0
             for j, action in enumerate(actions):
-                env.step(action)
-                env.render()
-
-                if j < num_actions - 1:
-                    # ensure that the actions deterministically lead to the same recorded states
-                    state_playback = env.sim.get_state().flatten()
-                    if not np.all(np.equal(states[j + 1], state_playback)):
-                        err = np.linalg.norm(states[j + 1] - state_playback)
-                        print(f"[warning] playback diverged by {err:.2f} for ep {ep} at step {j}")
+                total_actions += 1
+                if (not (action == [0, 0, 0, -1]).all()):
+                    env.step(action)
+                    env.render()
+                    repeat = 0
+                    if j < num_actions - 1:
+                        # ensure that the actions deterministically lead to the same recorded states
+                        state_playback = env.sim.get_state().flatten()
+                        if not np.all(np.equal(states[j + 1], state_playback)):
+                            err = np.linalg.norm(states[j + 1] - state_playback)
+                            print(f"[warning] playback diverged by {err:.2f} for ep {ep} at step {j}")
+                else:
+                    unused_actions += 1
+                
+                # repeat = (action == [0, 0, 0, -1]).all()
+            
+            print(f"cur percentage of unused actions: {(unused_actions/total_actions)*100}%")
+    
 
         else:
 
@@ -102,5 +115,9 @@ if __name__ == "__main__":
                 env.sim.set_state_from_flattened(state)
                 env.sim.forward()
                 env.render()
+        
+    if args.use_actions:
+        print(f"total percentage of unused actions: {(unused_actions/total_actions)*100}%")
 
+    
     f.close()

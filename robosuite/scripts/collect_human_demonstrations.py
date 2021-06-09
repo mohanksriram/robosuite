@@ -13,13 +13,26 @@ import argparse
 import datetime
 import h5py
 from glob import glob
+import glfw
 import numpy as np
 import json
+
+from numpy.core.numeric import array_equal
 
 import robosuite as suite
 from robosuite import load_controller_config
 from robosuite.wrappers import DataCollectionWrapper, VisualizationWrapper
 from robosuite.utils.input_utils import input2action
+
+CLOSE_ACTION = np.array([0., 0., 0., 1.])
+OPEN_ACTION = np.array([0., 0., 0., -1.])
+
+def gripper_action_needed(past_action, action):
+    return (not np.array_equal(past_action, OPEN_ACTION) and np.array_equal(action, OPEN_ACTION)) \
+        or (not np.array_equal(past_action, CLOSE_ACTION) and np.array_equal(action, CLOSE_ACTION))
+
+def robot_action_needed(action):
+    return np.array([act != 0 for act in action[:-1]]).any()
 
 
 def collect_human_trajectory(env, device, arm, env_configuration):
@@ -46,6 +59,12 @@ def collect_human_trajectory(env, device, arm, env_configuration):
     device.start_control()
 
     # Loop until we get a reset from the input or the task completes
+    i = 0
+    past_action = [0, 0, 0, -1.]
+    repeat_count = 0
+    MAX_REPEAT_COUNT = 10
+    gripper_action_required = False
+    robot_action_required = False
     while True:
         # Set active robot
         active_robot = env.robots[0] if env_configuration == "bimanual" else env.robots[arm == "left"]
@@ -63,9 +82,25 @@ def collect_human_trajectory(env, device, arm, env_configuration):
             break
 
         # Run environment step
-        env.step(action)
-        env.render()
-
+        # continue
+        if(i >= 0):
+            if not np.array_equal(past_action, action) or repeat_count == MAX_REPEAT_COUNT:
+                repeat_count = 0
+                gripper_action_required = gripper_action_needed(past_action, action)
+            
+            robot_action_required = robot_action_needed(action)
+            
+            if robot_action_required or (gripper_action_required and repeat_count <= MAX_REPEAT_COUNT):
+                if gripper_action_required:
+                    repeat_count += 1
+                observation, reward, done, misc = env.step(action)
+                past_action = action
+                env.render()
+            else:
+                env.render()
+                # glfw.poll_events()
+        i = i+1
+        # continue
         # Also break if we complete the task
         if task_completion_hold_count == 0:
             break
@@ -79,6 +114,7 @@ def collect_human_trajectory(env, device, arm, env_configuration):
         else:
             task_completion_hold_count = -1  # null the counter if there's no success
 
+    # glfw.wait_events()
     # cleanup for end of data collection episodes
     env.close()
 
@@ -182,7 +218,7 @@ if __name__ == "__main__":
     parser.add_argument("--arm", type=str, default="right", help="Which arm to control (eg bimanual) 'right' or 'left'")
     parser.add_argument("--camera", type=str, default="agentview", help="Which camera to use for collecting demos")
     parser.add_argument("--controller", type=str, default="OSC_POSE",
-                        help="Choice of controller. Can be 'IK_POSE' or 'OSC_POSE'")
+                        help="Choice of controller. Can be 'IK_POSE' or 'OSC_POSE' or 'OSC_POSITION'")
     parser.add_argument("--device", type=str, default="keyboard")
     parser.add_argument("--pos-sensitivity", type=float, default=1.0, help="How much to scale position user inputs")
     parser.add_argument("--rot-sensitivity", type=float, default=1.0, help="How much to scale rotation user inputs")
