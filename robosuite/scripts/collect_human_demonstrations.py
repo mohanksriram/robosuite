@@ -24,12 +24,13 @@ from robosuite import load_controller_config
 from robosuite.wrappers import DataCollectionWrapper, VisualizationWrapper
 from robosuite.utils.input_utils import input2action
 
-CLOSE_ACTION = np.array([0., 0., 0., 1.])
-OPEN_ACTION = np.array([0., 0., 0., -1.])
+CLOSE_ACTION = 1
+OPEN_ACTION = -1
+MAX_REPEAT_COUNT = 10
 
 def gripper_action_needed(past_action, action):
-    return (not np.array_equal(past_action, OPEN_ACTION) and np.array_equal(action, OPEN_ACTION)) \
-        or (not np.array_equal(past_action, CLOSE_ACTION) and np.array_equal(action, CLOSE_ACTION))
+    return (past_action[-1] == CLOSE_ACTION) and (action[-1] == OPEN_ACTION) \
+        or (past_action[-1] == OPEN_ACTION) and (action[-1] == CLOSE_ACTION)
 
 def robot_action_needed(action):
     return np.array([act != 0 for act in action[:-1]]).any()
@@ -62,7 +63,6 @@ def collect_human_trajectory(env, device, arm, env_configuration):
     i = 0
     past_action = [0, 0, 0, -1.]
     repeat_count = 0
-    MAX_REPEAT_COUNT = 10
     gripper_action_required = False
     robot_action_required = False
     while True:
@@ -93,6 +93,7 @@ def collect_human_trajectory(env, device, arm, env_configuration):
             if robot_action_required or (gripper_action_required and repeat_count <= MAX_REPEAT_COUNT):
                 if gripper_action_required:
                     repeat_count += 1
+                print(f"stepping for action: {action}")
                 observation, reward, done, misc = env.step(action)
                 past_action = action
                 env.render()
